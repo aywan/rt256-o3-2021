@@ -43,19 +43,26 @@ func checkBlock() error {
 
 	list := readTags(n)
 
-	state, ids := isValid(list, -1)
-	if state {
+	openIds, closeIds := isValid(list, -1)
+	if len(openIds) == 0 && len(closeIds) == 0 {
 		return nil
 	}
 
-	if len(ids) > 1 {
-		return incorrectError()
-	} else {
-		return almostError(list[ids[0]])
+	if len(openIds) == 0 && len(closeIds) == 1 {
+		return almostError(list[closeIds[0]])
 	}
 
-	for _, i := range ids {
-		if s, _ := isValid(list, i); s {
+	if len(openIds) == 1 && len(closeIds) == 0 {
+		return almostError(list[openIds[0]])
+	}
+
+	for _, i := range openIds {
+		if o, c := isValid(list, i); len(o) == 0 && len(c) == 0 {
+			return almostError(list[i])
+		}
+	}
+	for _, i := range closeIds {
+		if o, c := isValid(list, i); len(o) == 0 && len(c) == 0 {
 			return almostError(list[i])
 		}
 	}
@@ -75,10 +82,11 @@ func almostError(tag Tag) error {
 	return fmt.Errorf("ALMOST <%s%s>", slash, tag.Value)
 }
 
-func isValid(list TagList, skipId int) (bool, []int) {
+func isValid(list TagList, skipId int) ([]int, []int) {
 
-	errorIds := make([]int, 0, len(list))
-	state := true
+	openIds := make([]int, 0, len(list))
+	closeIds := make([]int, 0, len(list))
+
 	for _, tag := range list {
 		if tag.Id == skipId {
 			continue
@@ -89,25 +97,27 @@ func isValid(list TagList, skipId int) (bool, []int) {
 		}
 
 		if stack.length() > 0 {
-			topId := stack.getTop()
+			for stack.length() > 0 {
+				topId := stack.pop()
 
-			if list[topId].Value == tag.Value {
-				stack.pop()
-				continue
+				if list[topId].Value == tag.Value {
+					break
+				}
+
+				openIds = append(openIds, topId)
 			}
+			continue
 		}
 
-		errorIds = append(errorIds, tag.Id)
-		state = false
+		closeIds = append(closeIds, tag.Id)
 	}
 
 	for stack.length() > 0 {
 		tagId := stack.pop()
-		errorIds = append(errorIds, tagId)
-		state = false
+		openIds = append(openIds, tagId)
 	}
 
-	return state, errorIds
+	return openIds, closeIds
 }
 
 func readTags(n int) TagList {
